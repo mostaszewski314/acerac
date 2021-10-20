@@ -1,6 +1,6 @@
-gym
+gym==0.20.0
 pybullet==2.6.6
-tensorflow-gpu==2.1.0
-tensorflow-probability==0.8.0
-numpy==1.17.3
+tensorflow-gpu
+tensorflow-probability
+numpy
 

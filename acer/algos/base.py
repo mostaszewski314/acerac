@@ -37,26 +37,37 @@ class BaseActor(ABC, tf.keras.Model):
         """
         super().__init__(*args, **kwargs)
 
-        self._hidden_layers = []
+        self._hidden_layers_mean = []
 
         if type(actions_space) == gym.spaces.discrete.Discrete:
             actions_dim = actions_space.n
         else:
             actions_dim = actions_space.shape[0]
         
-        self._hidden_layers.extend(build_mlp_network(layers_sizes=layers))
+        self._hidden_layers_mean.extend(build_mlp_network(layers_sizes=layers))
 
-        self._hidden_layers.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
+        self._hidden_layers_mean.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
+
+
+        # TODO: probably needs output layer to squash the values to given interval
+        self._hidden_layers_std = []
+        self._hidden_layers_std.extend(build_mlp_network(layers_sizes=layers))
+        self._hidden_layers_std.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
+
+
 
         self.actions_dim = actions_dim
         self.beta_penalty = beta_penalty
         self._tf_time_step = tf_time_step
 
     def _forward(self, observations: np.array) -> tf.Tensor:
-        x = self._hidden_layers[0](observations)
-        for layer in self._hidden_layers[1:]:
-            x = layer(x)
-        return x
+        mean = self._hidden_layers_mean[0](observations)
+        for layer in self._hidden_layers_mean[1:]:
+            mean = layer(mean)
+        std = self._hidden_layers_std[0](observations)
+        for layer in self._hidden_layers_std[1:]:
+            std = layer(std)
+        return mean, std
 
     @property
     @abstractmethod
@@ -277,17 +288,17 @@ class GaussianActor(BaseActor):
 
         self._actions_bound = actions_bound
 
-        if std:
-            # change constant to Variable to make std a learned parameter
-            self.log_std = tf.constant(
-                tf.math.log([std] * actions_space.shape[0]),
-                name="actor_std",
-            )
-        else:
-            self.log_std = tf.constant(
-                tf.math.log(0.4 * actions_bound),
-                name="actor_std",
-            )
+        # if std:
+        #     # change constant to Variable to make std a learned parameter
+        #     self.log_std = tf.constant(
+        #         tf.math.log([std] * actions_space.shape[0]),
+        #         name="actor_std",
+        #     )
+        # else:
+        #     self.log_std = tf.constant(
+        #         tf.math.log(0.4 * actions_bound),
+        #         name="actor_std",
+        #     )
 
     @property
     def action_dtype(self):
@@ -298,10 +309,10 @@ class GaussianActor(BaseActor):
         return np.float32
 
     def loss(self, observations: np.array, actions: np.array, d: np.array) -> tf.Tensor:
-        mean = self._forward(observations)
+        mean, std = self._forward(observations)
         dist = tfp.distributions.MultivariateNormalDiag(
             loc=mean,
-            scale_diag=tf.exp(self.log_std)
+            scale_diag=tf.exp(std)
         )
 
         action_log_probs = tf.expand_dims(dist.log_prob(actions), axis=1)
@@ -318,10 +329,10 @@ class GaussianActor(BaseActor):
         # entropy_penalty = 0.01 * entropy
 
         total_loss = tf.reduce_mean(-tf.math.multiply(action_log_probs, d) + bounds_penalty)
-
+        #TODO: the place for the loss of the STD network
         with tf.name_scope('actor'):
-            for i in range(self.actions_dim):
-                tf.summary.scalar(f'std_{i}', tf.exp(self.log_std[i]), step=self._tf_time_step)
+            # for i in range(self.actions_dim):
+            #     tf.summary.scalar(f'std_{i}', tf.exp(self.log_std[i]), step=self._tf_time_step)
             tf.summary.scalar('batch_loss', total_loss, step=self._tf_time_step)
             tf.summary.scalar('batch_bounds_penalty_mean', tf.reduce_mean(bounds_penalty), step=self._tf_time_step)
             tf.summary.scalar('batch_entropy_mean', tf.reduce_mean(entropy), step=self._tf_time_step)
@@ -329,21 +340,21 @@ class GaussianActor(BaseActor):
         return total_loss
 
     def prob(self, observations: tf.Tensor, actions: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
-        mean = self._forward(observations)
+        mean, std = self._forward(observations)
         dist = tfp.distributions.MultivariateNormalDiag(
             loc=mean,
-            scale_diag=tf.exp(self.log_std)
+            scale_diag=tf.exp(std)
         )
 
         return dist.prob(actions), dist.log_prob(actions)
 
     @tf.function
     def act(self, observations: tf.Tensor, **kwargs) -> Tuple[tf.Tensor, tf.Tensor]:
-        mean = self._forward(observations)
+        mean, std = self._forward(observations)
 
         dist = tfp.distributions.MultivariateNormalDiag(
             loc=mean,
-            scale_diag=tf.exp(self.log_std)
+            scale_diag=tf.exp(std)
         )
 
         actions = dist.sample(dtype=self.dtype)
@@ -356,9 +367,9 @@ class GaussianActor(BaseActor):
 
     @tf.function
     def act_deterministic(self, observations: tf.Tensor, **kwargs) -> tf.Tensor:
-        """Returns mean of the Gaussian"""
-        mean = self._forward(observations)
-        return mean
+        """Returns mean and std of the Gaussian"""
+        mean, std = self._forward(observations)
+        return mean, std
 
 
 class BaseACERAgent(ABC):
