@@ -339,6 +339,27 @@ class GaussianActor(BaseActor):
 
         return total_loss
 
+    def loss_std(self, observations: np.array, actions: np.array, m: np.array, alpha: float = 0.1) -> tf.Tensor:
+        mean = tf.stop_gradient(self._forward_mean(observations)) # confirm this tf.stop_gradient function !!!
+        std = self._forward_std(observations)
+        no_alpha =  tf.reduce_sum(
+            tf.scalar_mul(0.5,tf.square(
+                tf.math.multiply(m - mean,
+                tf.math.reciprocal(tf.exp(std)))
+            )))
+        with_alpha = tf.reduce_sum(
+            tf.scalar_mul(0.5,tf.square(
+                tf.math.multiply(actions - mean,
+                tf.math.reciprocal(tf.exp(std)))
+            )))
+        total_loss = no_alpha + tf.scalar_mul(alpha, with_alpha) + tf.scalar_mul(
+            (1+alpha),
+            tf.reduce_sum(std)
+        ) - (1+alpha)*tf.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
+        with tf.name_scope('actor'):
+            tf.summary.scalar('batch_loss_std', total_loss, step=self._tf_time_step)
+        return total_loss
+
     def prob(self, observations: tf.Tensor, actions: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         mean, std = self._forward(observations)
         dist = tfp.distributions.MultivariateNormalDiag(
@@ -363,7 +384,7 @@ class GaussianActor(BaseActor):
         with tf.name_scope('actor'):
             tf.summary.scalar(f'batch_action_mean', tf.reduce_mean(actions), step=self._tf_time_step)
 
-        return actions, actions_probs
+        return actions, actions_probs, mean, std
 
     @tf.function
     def act_deterministic(self, observations: tf.Tensor, **kwargs) -> tf.Tensor:
@@ -422,7 +443,7 @@ class BaseACERAgent(ABC):
         self._data_loader = tf.data.Dataset.from_generator(
             self._experience_replay_generator,
             (tf.dtypes.float32, tf.dtypes.float32, self._actor.action_dtype, tf.dtypes.float32, tf.dtypes.float32,
-             tf.dtypes.float32, self._actor.action_dtype, tf.dtypes.bool, tf.dtypes.int32)
+             tf.dtypes.float32, self._actor.action_dtype, tf.dtypes.bool, tf.dtypes.int32, self._actor.action_dtype, self._actor.action_dtype)
         ).prefetch(1)
 
         self._actor_optimizer = tf.keras.optimizers.Adam(
@@ -547,16 +568,16 @@ class BaseACERAgent(ABC):
         """
         processed_obs = tf.convert_to_tensor(self._process_observations(observations))
         if is_deterministic:
-            return self._actor.act_deterministic(processed_obs).numpy(), None
+            return self._actor.act_deterministic(processed_obs)[0].numpy(), None, None, None
         else:
-            actions, policies = self._actor.act(processed_obs)
-            return actions.numpy(), policies.numpy()
+            actions, policies, mean, std = self._actor.act(processed_obs)
+            return actions.numpy(), policies.numpy(), mean.numpy(), std.numpy()
 
     def _experience_replay_generator(self):
         while True:
             offline_batch = self._fetch_offline_batch()
 
-            obs_flatten, obs_next_flatten, actions_flatten, policies_flatten, rewards_flatten, dones_flatten \
+            obs_flatten, obs_next_flatten, actions_flatten, policies_flatten, rewards_flatten, dones_flatten, means_flatten, stds_flatten \
                 = utils.flatten_experience(offline_batch)
 
             lengths = [len(batch[0]['observations']) for batch in offline_batch]
@@ -573,7 +594,9 @@ class BaseACERAgent(ABC):
                 first_obs,
                 first_actions,
                 dones_flatten,
-                lengths
+                lengths,
+                means_flatten,
+                stds_flatten
             )
 
     def _process_observations(self, observations: tf.Tensor) -> tf.Tensor:

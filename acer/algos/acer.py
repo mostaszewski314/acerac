@@ -63,7 +63,7 @@ class ACER(BaseACERAgent):
 
     @tf.function(experimental_relax_shapes=True)
     def _learn_from_experience_batch(self, obs, obs_next, actions, old_policies,
-                                     rewards, first_obs, first_actions, dones, lengths):
+                                     rewards, first_obs, first_actions, dones, lengths, means, stds):
         """Backward pass with single batch of experience.
 
         Every experience replay requires sequence of experiences with random length, thus we have to use
@@ -77,9 +77,9 @@ class ACER(BaseACERAgent):
         rewards = self._process_rewards(rewards)
 
         batches_indices = tf.RaggedTensor.from_row_lengths(values=tf.range(tf.reduce_sum(lengths)), row_lengths=lengths)
-        values = tf.squeeze(self._critic.value(obs))
-        values_next = tf.squeeze(self._critic.value(obs_next)) * (1.0 - tf.cast(dones, tf.dtypes.float32))
-        policies, log_policies = tf.split(self._actor.prob(obs, actions), 2, axis=0)
+        values = tf.squeeze(self._critic.value(obs)) # V_{obs}
+        values_next = tf.squeeze(self._critic.value(obs_next)) * (1.0 - tf.cast(dones, tf.dtypes.float32)) # V_{obs + 1} given terminating episode
+        policies, log_policies = tf.split(self._actor.prob(obs, actions), 2, axis=0) # Pi(actions, obs)
         policies, log_policies = tf.squeeze(policies), tf.squeeze(log_policies)
         indices = tf.expand_dims(batches_indices, axis=2)
 
@@ -110,7 +110,7 @@ class ACER(BaseACERAgent):
         # final summation over original batches
         d = tf.stop_gradient(tf.reduce_sum(d_coeffs_batches, axis=1))
 
-        self._backward_pass(first_obs, first_actions, d)
+        self._backward_pass(first_obs, first_actions, d) # TODO: Why we pass only first obs & actions?
 
         _, new_log_policies = tf.split(self._actor.prob(obs, actions), 2, axis=0)
         new_log_policies = tf.squeeze(new_log_policies)

@@ -36,6 +36,8 @@ class ReplayBuffer:
         self._policies = self._init_field(BufferFieldSpec((), np.float32))
         self._dones = self._init_field(BufferFieldSpec((), bool))
         self._ends = self._init_field(BufferFieldSpec((), bool))
+        self._means = self._init_field(action_spec)
+        self._stds = self._init_field(action_spec)
 
     def _init_field(self, field_spec: BufferFieldSpec):
         shape = (self._max_size, *field_spec.shape)
@@ -43,7 +45,7 @@ class ReplayBuffer:
 
     def put(self, action: Union[int, float, list], observation: np.array, next_observation: np.array,
             reward: float, policy: float, is_done: bool,
-            end: bool):
+            end: bool, means: np.array, stds: np.array):
         """Stores one experience tuple in the buffer.
 
         Args:
@@ -64,6 +66,8 @@ class ReplayBuffer:
         self._policies[self._pointer] = policy
         self._dones[self._pointer] = is_done
         self._ends[self._pointer] = end
+        self._means[self._pointer] = means
+        self._stds[self._pointer] = stds
 
         self._move_pointer()
         self._update_size()
@@ -94,12 +98,14 @@ class ReplayBuffer:
                 "next_observations": np.array([]),
                 "policies": np.array([]),
                 "dones": np.array([]),
-                "ends": np.array([])
+                "ends": np.array([]),
+                "means": np.array([]),
+                "stds": np.array([]),
             }, -1)
         sample_index = self._sample_random_index()
         start_index, end_index = self._get_indices(sample_index, trajectory_len)
 
-        batch = self._fetch_batch(end_index, sample_index, start_index)
+        batch = self._fetch_batch(end_index, sample_index, start_index) # Po co jest sample index skoro _get_indices zawsze zwraca start_index == sample_index?
         return batch
     
     def get_vec(self, length: int, trajectory_len: int) -> Tuple[Dict[str, np.array], int]:
@@ -124,6 +130,8 @@ class ReplayBuffer:
         policies = self._policies[buffer_slice]
         done = self._dones[buffer_slice]
         end = self._ends[buffer_slice]
+        means = self._means[buffer_slice]
+        stds = self._stds[buffer_slice]
 
         return {
             "actions": actions,
@@ -132,7 +140,9 @@ class ReplayBuffer:
             "next_observations": next_observations,
             "policies": policies,
             "dones": done,
-            "ends": end
+            "ends": end,
+            "means": means,
+            "stds": stds
         }
 
     def _get_indices(self, sample_index: int, trajectory_len: int) -> Tuple[int, int]:
@@ -357,7 +367,6 @@ class MultiReplayBuffer:
             samples = [buffer.get(trajectory_len) for buffer, trajectory_len in zip(self._buffers, trajectories_lens)]
         else:
             samples = [buffer.get() for buffer in self._buffers]
-
         return samples
     
     def get_vec(self, length_per_buffer: int, trajectory_len: int) -> Tuple[Dict[str, np.array], np.array]:

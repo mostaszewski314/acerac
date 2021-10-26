@@ -161,7 +161,7 @@ class Runner:
         logging.info(f"saved evaluation results in {self._log_dir}")
 
     def _step(self) -> List[Tuple[Union[int, float], np.array, float, float, bool, bool]]:
-        actions, policies = self._agent.predict_action(self._current_obs)
+        actions, policies, means, stds = self._agent.predict_action(self._current_obs)
         steps = self._env.step(actions)
         rewards = []
         experience = []
@@ -185,7 +185,7 @@ class Runner:
 
             reward = steps[1][i]
             experience.append(
-                (actions[i], old_obs[i], self._current_obs[i], reward, policies[i], is_done, is_end)
+                (actions[i], old_obs[i], self._current_obs[i], reward, policies[i], is_done, is_end, means[i], stds[i])
             )
 
             self._returns[i] += steps[1][i]
@@ -220,7 +220,7 @@ class Runner:
 
         while not all(envs_finished):
             time_step += 1
-            actions, _ = self._agent.predict_action(current_obs, is_deterministic=True)
+            actions, _, _, _ = self._agent.predict_action(current_obs, is_deterministic=True)
             steps = self._evaluate_env.step(actions)
             current_obs = steps[0]
             for i in range(self._num_evaluation_runs):

@@ -41,8 +41,10 @@ def flatten_experience(buffers_batches: List[Tuple[Dict[str, Union[np.array, lis
     policies = np.concatenate([batch[0]['policies'] for batch in buffers_batches], axis=0)
     rewards = np.concatenate([batch[0]['rewards'] for batch in buffers_batches], axis=0)
     dones = np.concatenate([batch[0]['dones'] for batch in buffers_batches], axis=0)
+    means = np.concatenate([batch[0]['means'] for batch in buffers_batches], axis=0)
+    stds = np.concatenate([batch[0]['stds'] for batch in buffers_batches], axis=0)
 
-    return observations, next_observations, actions, policies, rewards, dones
+    return observations, next_observations, actions, policies, rewards, dones, means, dones
 
 
 def is_atari(env_id: str) -> bool:
