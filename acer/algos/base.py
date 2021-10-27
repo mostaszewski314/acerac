@@ -310,6 +310,7 @@ class GaussianActor(BaseActor):
 
     def loss(self, observations: np.array, actions: np.array, d: np.array) -> tf.Tensor:
         mean, std = self._forward(observations)
+        std = tf.stop_gradient(std)
         dist = tfp.distributions.MultivariateNormalDiag(
             loc=mean,
             scale_diag=tf.exp(std)
@@ -331,8 +332,8 @@ class GaussianActor(BaseActor):
         total_loss = tf.reduce_mean(-tf.math.multiply(action_log_probs, d) + bounds_penalty)
         #TODO: the place for the loss of the STD network
         with tf.name_scope('actor'):
-            # for i in range(self.actions_dim):
-            #     tf.summary.scalar(f'std_{i}', tf.exp(self.log_std[i]), step=self._tf_time_step)
+            for i in range(self.actions_dim):
+                tf.summary.scalar(f'std_{i}', std[i], step=self._tf_time_step)
             tf.summary.scalar('batch_loss', total_loss, step=self._tf_time_step)
             tf.summary.scalar('batch_bounds_penalty_mean', tf.reduce_mean(bounds_penalty), step=self._tf_time_step)
             tf.summary.scalar('batch_entropy_mean', tf.reduce_mean(entropy), step=self._tf_time_step)
@@ -340,8 +341,8 @@ class GaussianActor(BaseActor):
         return total_loss
 
     def loss_std(self, observations: np.array, actions: np.array, m: np.array, alpha: float = 0.1) -> tf.Tensor:
-        mean = tf.stop_gradient(self._forward_mean(observations)) # confirm this tf.stop_gradient function !!!
-        std = self._forward_std(observations)
+        mean, std = self._forward(observations)
+        mean = tf.stop_gradient(mean)
         no_alpha =  tf.reduce_sum(
             tf.scalar_mul(0.5,tf.square(
                 tf.math.multiply(m - mean,
@@ -355,7 +356,7 @@ class GaussianActor(BaseActor):
         total_loss = no_alpha + tf.scalar_mul(alpha, with_alpha) + tf.scalar_mul(
             (1+alpha),
             tf.reduce_sum(std)
-        ) - (1+alpha)*tf.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
+        ) - (1+alpha)*tf.math.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
         with tf.name_scope('actor'):
             tf.summary.scalar('batch_loss_std', total_loss, step=self._tf_time_step)
         return total_loss

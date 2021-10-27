@@ -44,7 +44,7 @@ def flatten_experience(buffers_batches: List[Tuple[Dict[str, Union[np.array, lis
     means = np.concatenate([batch[0]['means'] for batch in buffers_batches], axis=0)
     stds = np.concatenate([batch[0]['stds'] for batch in buffers_batches], axis=0)
 
-    return observations, next_observations, actions, policies, rewards, dones, means, dones
+    return observations, next_observations, actions, policies, rewards, dones, means, stds
 
 
 def is_atari(env_id: str) -> bool:

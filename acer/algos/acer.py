@@ -72,6 +72,7 @@ class ACER(BaseACERAgent):
         See Equation (8) and Equation (9) in the paper (1).
         """
 
+        means = tf.expand_dims(means, axis=1)
         obs = self._process_observations(obs)
         obs_next = self._process_observations(obs_next)
         rewards = self._process_rewards(rewards)
@@ -110,7 +111,7 @@ class ACER(BaseACERAgent):
         # final summation over original batches
         d = tf.stop_gradient(tf.reduce_sum(d_coeffs_batches, axis=1))
 
-        self._backward_pass(first_obs, first_actions, d) # TODO: Why we pass only first obs & actions?
+        self._backward_pass(first_obs, first_actions, d, means)
 
         _, new_log_policies = tf.split(self._actor.prob(obs, actions), 2, axis=0)
         new_log_policies = tf.squeeze(new_log_policies)
@@ -118,7 +119,7 @@ class ACER(BaseACERAgent):
         with tf.name_scope('actor'):
             tf.summary.scalar('sample_approx_kl_divergence', approx_kl, self._tf_time_step)
 
-    def _backward_pass(self, observations: tf.Tensor, actions: tf.Tensor, d: tf.Tensor):
+    def _backward_pass(self, observations: tf.Tensor, actions: tf.Tensor, d: tf.Tensor, modes: tf.Tensor):
         """Performs backward pass in BaseActor's and Critic's networks
 
         Args:
@@ -129,6 +130,7 @@ class ACER(BaseACERAgent):
         """
         with tf.GradientTape() as tape:
             loss = self._actor.loss(observations, actions, d)
+            loss += self._actor.loss_std(observations, actions, modes)
         grads = tape.gradient(loss, self._actor.trainable_variables)
         if self._gradient_norm is not None:
             grads = self._clip_gradient(grads, self._actor_gradient_norm_median, 'actor')

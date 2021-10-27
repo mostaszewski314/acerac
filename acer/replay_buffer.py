@@ -130,8 +130,8 @@ class ReplayBuffer:
         policies = self._policies[buffer_slice]
         done = self._dones[buffer_slice]
         end = self._ends[buffer_slice]
-        means = self._means[buffer_slice]
-        stds = self._stds[buffer_slice]
+        means = self._means[buffer_slice[0]] # We only need means for the first index of experience
+        stds = self._stds[buffer_slice[0]]
 
         return {
             "actions": actions,
