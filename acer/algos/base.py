@@ -330,10 +330,9 @@ class GaussianActor(BaseActor):
         # entropy_penalty = 0.01 * entropy
 
         total_loss = tf.reduce_mean(-tf.math.multiply(action_log_probs, d) + bounds_penalty)
-        #TODO: the place for the loss of the STD network
         with tf.name_scope('actor'):
-            for i in range(self.actions_dim):
-                tf.summary.scalar(f'std_{i}', std[i], step=self._tf_time_step)
+            # for i in range(self.actions_dim):
+            #     tf.summary.scalar(f'std_{i}', std[i], step=self._tf_time_step)
             tf.summary.scalar('batch_loss', total_loss, step=self._tf_time_step)
             tf.summary.scalar('batch_bounds_penalty_mean', tf.reduce_mean(bounds_penalty), step=self._tf_time_step)
             tf.summary.scalar('batch_entropy_mean', tf.reduce_mean(entropy), step=self._tf_time_step)
@@ -343,6 +342,7 @@ class GaussianActor(BaseActor):
     def loss_std(self, observations: np.array, actions: np.array, m: np.array, alpha: float = 0.1) -> tf.Tensor:
         mean, std = self._forward(observations)
         mean = tf.stop_gradient(mean)
+
         no_alpha =  tf.reduce_sum(
             tf.scalar_mul(0.5,tf.square(
                 tf.math.multiply(m - mean,
@@ -384,7 +384,8 @@ class GaussianActor(BaseActor):
 
         with tf.name_scope('actor'):
             tf.summary.scalar(f'batch_action_mean', tf.reduce_mean(actions), step=self._tf_time_step)
-
+            for i in range(std.shape[1]):
+                tf.summary.scalar(f'batch_action_std_{i}', tf.reduce_mean(std[i]), step=self._tf_time_step)
         return actions, actions_probs, mean, std
 
     @tf.function

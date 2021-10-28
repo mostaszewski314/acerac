@@ -72,7 +72,6 @@ class ACER(BaseACERAgent):
         See Equation (8) and Equation (9) in the paper (1).
         """
 
-        means = tf.expand_dims(means, axis=1)
         obs = self._process_observations(obs)
         obs_next = self._process_observations(obs_next)
         rewards = self._process_rewards(rewards)

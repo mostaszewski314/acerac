@@ -141,8 +141,8 @@ class ReplayBuffer:
             "policies": policies,
             "dones": done,
             "ends": end,
-            "means": means,
-            "stds": stds
+            "means": np.expand_dims(means, axis=0),
+            "stds": np.expand_dims(stds, axis=0)
         }
 
     def _get_indices(self, sample_index: int, trajectory_len: int) -> Tuple[int, int]:
