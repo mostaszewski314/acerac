@@ -20,8 +20,6 @@ from replay_buffer import MultiReplayBuffer, BufferFieldSpec, ReplayBuffer
 # session = InteractiveSession(config=config)
 
 
-
-
 class BaseActor(ABC, tf.keras.Model):
 
     def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers_mean: Optional[Tuple[int]],
@@ -285,9 +283,10 @@ class GaussianActor(BaseActor):
             actions_bound: upper (lower == '-actions_bound') bound for allowed actions,
              required in case of continuous actions
         """
+        self.alpha_loss = kwargs.pop('alpha_loss')
         super().__init__(observations_space, actions_space, layers_mean, layers_std, beta_penalty, *args, **kwargs)
         self._actions_bound = actions_bound
-
+        
         # if std:
         #     # change constant to Variable to make std a learned parameter
         #     self.log_std = tf.constant(
@@ -339,10 +338,10 @@ class GaussianActor(BaseActor):
 
         return total_loss
 
-    def loss_std(self, observations: np.array, actions: np.array, m: np.array, alpha: float = 0.1) -> tf.Tensor:
+    def loss_std(self, observations: np.array, actions: np.array, m: np.array) -> tf.Tensor:
         mean, std = self._forward(observations)
         mean = tf.stop_gradient(mean)
-
+        alpha = self.alpha_loss
         no_alpha =  tf.reduce_sum(
             tf.scalar_mul(0.5,tf.square(
                 tf.math.multiply(m - mean,
@@ -356,7 +355,8 @@ class GaussianActor(BaseActor):
         total_loss = no_alpha + tf.scalar_mul(alpha, with_alpha) + tf.scalar_mul(
             (1+alpha),
             tf.reduce_sum(std)
-        ) - (1+alpha)*tf.math.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
+        ) 
+        # - (1+alpha)*tf.math.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
         with tf.name_scope('actor'):
             tf.summary.scalar('batch_loss_std', total_loss, step=self._tf_time_step)
 
@@ -451,8 +451,15 @@ class BaseACERAgent(ABC):
              tf.dtypes.float32, self._actor.action_dtype, tf.dtypes.bool, tf.dtypes.int32, self._actor.action_dtype, self._actor.action_dtype)
         ).prefetch(1)
 
-        self._actor_optimizer = tf.keras.optimizers.Adam(
-            lr=actor_lr,
+        self._actor_optimizer_mean = tf.keras.optimizers.Adam(
+            lr=actor_lr[0],
+            beta_1=actor_adam_beta1,
+            beta_2=actor_adam_beta2,
+            epsilon=actor_adam_epsilon
+        )
+        
+        self._actor_optimizer_std = tf.keras.optimizers.Adam(
+            lr=actor_lr[1],
             beta_1=actor_adam_beta1,
             beta_2=actor_adam_beta2,
             epsilon=actor_adam_epsilon

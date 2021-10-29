@@ -16,6 +16,7 @@ parser.add_argument('--algo', type=str, help='Algorithm to be used', default="ac
 parser.add_argument('--env_name', type=str, help='OpenAI Gym environment name', default="CartPole-v0")
 parser.add_argument('--gamma', type=float, help='discount factor', required=False, default=0.99)
 parser.add_argument('--lam', type=float, help='lambda parameter', required=False, default=0.9)
+parser.add_argument('--alpha_loss', type=float, help='alpha parameter', required=False, default=0.1)
 parser.add_argument('--b', type=float, help='probability density truncation coefficient',
                     required=False, default=3)
 parser.add_argument('--actor_adam_epsilon', type=float, help='ADAM optimizer epsilon parameter (BaseActor)',
@@ -30,7 +31,7 @@ parser.add_argument('--critic_adam_beta1', type=float, help='ADAM optimizer beta
                     required=False, default=0.9)
 parser.add_argument('--critic_adam_beta2', type=float, help='ADAM optimizer beta2 (Critic)',
                     required=False, default=0.999)
-parser.add_argument('--actor_lr', type=float, help='BaseActor learning rate', required=False, default=0.001)
+parser.add_argument('--actor_lr', type=float, nargs='+', help='BaseActor learning rate', required=False, default=(0.001, 0.001))
 parser.add_argument('--critic_lr', type=float, help='Critic learning rate', required=False, default=0.001)
 parser.add_argument('--explorer_lr', type=float, help='Explorer (eacer) learning rate', required=False, default=0.001)
 parser.add_argument('--actor_beta_penalty', type=float, help='BaseActor penalty coefficient', default=0.001)

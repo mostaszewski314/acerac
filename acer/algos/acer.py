@@ -26,10 +26,11 @@ class ACER(BaseACERAgent):
 
         TODO: finish docstrings
         """
-
+        self.alpha_loss = kwargs.get('alpha_loss')
         super().__init__(observations_space, actions_space, actor_layers_mean, actor_layers_std, critic_layers, *args, **kwargs)
         self._lam = lam
         self._b = b
+        
 
     def _init_actor(self) -> BaseActor:
         if self._is_discrete:
@@ -40,7 +41,7 @@ class ACER(BaseACERAgent):
         else:
             return GaussianActor(
                 self._observations_space, self._actions_space, self._actor_layers_mean, self._actor_layers_std,
-                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step,
+                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step, alpha_loss=self.alpha_loss
             )
 
     def _init_critic(self) -> Critic:
@@ -130,13 +131,23 @@ class ACER(BaseACERAgent):
         """
         with tf.GradientTape() as tape:
             loss = self._actor.loss(observations, actions, d)
-            loss += self._actor.loss_std(observations, actions, modes)
-        grads = tape.gradient(loss, self._actor.trainable_variables)
+        grads = tape.gradient(loss, self._actor._hidden_layers_mean.trainable_variables)
         if self._gradient_norm is not None:
             grads = self._clip_gradient(grads, self._actor_gradient_norm_median, 'actor')
-        gradients = zip(grads, self._actor.trainable_variables)
+        gradients = zip(grads, self._actor._hidden_layers_mean.trainable_variables)
+        self._actor_optimizer_mean.apply_gradients(gradients)
 
-        self._actor_optimizer.apply_gradients(gradients)
+
+        with tf.GradientTape() as tape:
+            loss = self._actor.loss_std(observations, actions, modes)
+        grads = tape.gradient(loss, self._actor._hidden_layers_std.trainable_variables)
+        if self._gradient_norm is not None:
+            grads = self._clip_gradient(grads, self._actor_gradient_norm_median, 'actor')
+        gradients = zip(grads, self._actor._hidden_layers_std.trainable_variables)
+        self._actor_optimizer_std.apply_gradients(gradients)
+        
+
+
         with tf.GradientTape() as tape:
             loss = self._critic.loss(observations, d)
         grads = tape.gradient(loss, self._critic.trainable_variables)
