@@ -47,7 +47,9 @@ parser.add_argument('--std', type=float, help='value on diagonal of Normal dist.
 parser.add_argument('--learning_starts', type=int, help='experience replay warm start coefficient', default=10000)
 parser.add_argument('--memory_size', type=int, help='memory buffer size (sum of all of the buffers from every env',
                     required=False, default=1e6)
-parser.add_argument('--actor_layers', nargs='+', type=int, help='List of BaseActor\'s neural network hidden layers sizes',
+parser.add_argument('--actor_layers_mean', nargs='+', type=int, help='List of BaseActor\'s neural network hidden layers sizes',
+                    required=False, default=(100, 100))
+parser.add_argument('--actor_layers_std', nargs='+', type=int, help='List of BaseActor\'s neural network hidden layers sizes',
                     required=False, default=(100, 100))
 parser.add_argument('--critic_layers', nargs='+', type=int, help='List of Critic\'s neural network hidden layers sizes',
                     required=False, default=(100, 100))
@@ -165,7 +167,7 @@ def main():
         do_checkpoint=not no_checkpoint,
         record_time_steps=record_time_steps,
         n_step=n_step,
-        dump=dump
+        dump=dump,
     )
 
     def handle_sigint(sig, frame):

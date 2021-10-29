@@ -12,18 +12,20 @@ import utils
 from models.mlp import build_mlp_network
 from replay_buffer import MultiReplayBuffer, BufferFieldSpec, ReplayBuffer
 
-from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
+# from tensorflow.compat.v1 import ConfigProto
+# from tensorflow.compat.v1 import InteractiveSession
 
-config = ConfigProto()
-config.gpu_options.allow_growth = True
-session = InteractiveSession(config=config)
+# config = ConfigProto()
+# config.gpu_options.allow_growth = True
+# session = InteractiveSession(config=config)
+
+
 
 
 class BaseActor(ABC, tf.keras.Model):
 
-    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers: Optional[Tuple[int]],
-                 beta_penalty: float, tf_time_step: tf.Variable, *args, **kwargs):
+    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers_mean: Optional[Tuple[int]],
+                layers_std: Optional[Tuple[int]], beta_penalty: float, tf_time_step: tf.Variable, *args, **kwargs):
         """Base abstract Actor class
 
         Args:
@@ -44,14 +46,14 @@ class BaseActor(ABC, tf.keras.Model):
         else:
             actions_dim = actions_space.shape[0]
         
-        self._hidden_layers_mean.extend(build_mlp_network(layers_sizes=layers))
+        self._hidden_layers_mean.extend(build_mlp_network(layers_sizes=layers_mean))
 
         self._hidden_layers_mean.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
 
 
         # TODO: probably needs output layer to squash the values to given interval
         self._hidden_layers_std = []
-        self._hidden_layers_std.extend(build_mlp_network(layers_sizes=layers))
+        self._hidden_layers_std.extend(build_mlp_network(layers_sizes=layers_std))
         self._hidden_layers_std.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
 
 
@@ -188,11 +190,10 @@ class Critic(BaseCritic):
 
 class CategoricalActor(BaseActor):
 
-    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers: Optional[Tuple[int]],
-                 *args, **kwargs):
+    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers_mean: Optional[Tuple[int]],
+                 layers_std: Optional[Tuple[int]], *args, **kwargs):
         """BaseActor for discrete actions spaces. Uses Categorical Distribution"""
-        super().__init__(observations_space, actions_space, layers, *args, **kwargs)
-
+        super().__init__(observations_space, actions_space, layers_mean, layers_std, *args, **kwargs)
     @property
     def action_dtype(self):
         return tf.dtypes.int32
@@ -254,9 +255,9 @@ class CategoricalActor(BaseActor):
         actions = tf.random.categorical(log_probs, num_samples=1, dtype=tf.dtypes.int32)
         actions_probs = tf.gather_nd(probs, actions, batch_dims=1)
 
-        with tf.name_scope('actor'):
-            # TODO: refactor
-            tf.summary.histogram('action', actions, step=self._tf_time_step)
+        # with tf.name_scope('actor'):
+        #     # TODO: refactor
+        #     tf.summary.histogram('action', actions, step=self._tf_time_step)
         return tf.squeeze(actions, axis=[1]), actions_probs
 
     @tf.function
@@ -271,8 +272,8 @@ class CategoricalActor(BaseActor):
 
 class GaussianActor(BaseActor):
 
-    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers: Optional[Tuple[int]],
-                 beta_penalty: float, actions_bound: float, std: float = None, *args, **kwargs):
+    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, layers_mean: Optional[Tuple[int]],
+                layers_std: Optional[Tuple[int]], beta_penalty: float, actions_bound: float, std: float = None, *args, **kwargs):
         """BaseActor for continuous actions space. Uses MultiVariate Gaussian Distribution as policy distribution.
 
         TODO: introduce [a, b] intervals as allowed actions bounds
@@ -284,8 +285,7 @@ class GaussianActor(BaseActor):
             actions_bound: upper (lower == '-actions_bound') bound for allowed actions,
              required in case of continuous actions
         """
-        super().__init__(observations_space, actions_space, layers, beta_penalty, *args, **kwargs)
-
+        super().__init__(observations_space, actions_space, layers_mean, layers_std, beta_penalty, *args, **kwargs)
         self._actions_bound = actions_bound
 
         # if std:
@@ -359,6 +359,7 @@ class GaussianActor(BaseActor):
         ) - (1+alpha)*tf.math.log(1/(2*tf.constant(np.pi))) # this last factor to be removed
         with tf.name_scope('actor'):
             tf.summary.scalar('batch_loss_std', total_loss, step=self._tf_time_step)
+
         return total_loss
 
     def prob(self, observations: tf.Tensor, actions: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
@@ -397,7 +398,8 @@ class GaussianActor(BaseActor):
 
 class BaseACERAgent(ABC):
     """Base ACER abstract class"""
-    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, actor_layers: Optional[Tuple[int]],
+    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, actor_layers_mean: Optional[Tuple[int]],
+                 actor_layers_std: Optional[Tuple[int]],
                  critic_layers: Tuple[int], gamma: int = 0.99, actor_beta_penalty: float = 0.001,
                  std: Optional[float] = None, memory_size: int = 1e6, num_parallel_envs: int = 10,
                  batches_per_env: int = 5, c: int = 10, c0: float = 0.3, actor_lr: float = 0.001,
@@ -417,7 +419,8 @@ class BaseACERAgent(ABC):
         self._c = c
         self._c0 = c0
         self._learning_starts = learning_starts
-        self._actor_layers = tuple(actor_layers)
+        self._actor_layers_mean = tuple(actor_layers_mean)
+        self._actor_layers_std = tuple(actor_layers_std)
         self._critic_layers = tuple(critic_layers)
         self._gamma = gamma
         self._batches_per_env = batches_per_env
@@ -501,15 +504,15 @@ class BaseACERAgent(ABC):
             norm_variable.assign_add(
                 update_sign * norm_variable * 0.01
             )
-            with tf.name_scope(scope):
-                tf.summary.scalar("gradient_norm_median", norm_variable, self._tf_time_step)
+            # with tf.name_scope(scope):
+            #     tf.summary.scalar("gradient_norm_median", norm_variable, self._tf_time_step)
         else:
             grads_clipped, grads_norm = tf.clip_by_global_norm(
                 grads,
                 self._gradient_norm
             )
-        with tf.name_scope(scope):
-            tf.summary.scalar("gradient_norm", grads_norm, self._tf_time_step)
+        # with tf.name_scope(scope):
+        #     tf.summary.scalar("gradient_norm", grads_norm, self._tf_time_step)
         return grads_clipped
 
     def save_experience(self, steps: List[
@@ -535,17 +538,17 @@ class BaseACERAgent(ABC):
     def _update_obs_rms(self, obs):
         if self._running_mean_obs:
             self._running_mean_obs.update(obs)
-            with tf.name_scope('observations'):
-                tf.summary.scalar(
-                    f'obs_running_mean_norm',
-                    tf.linalg.norm(self._running_mean_obs.mean),
-                    step=self._tf_time_step
-                )
-                tf.summary.scalar(
-                    f'obs_running_std_norm',
-                    tf.linalg.norm(tf.sqrt(self._running_mean_obs.var)),
-                    step=self._tf_time_step
-                )
+            # with tf.name_scope('observations'):
+            #     tf.summary.scalar(
+            #         f'obs_running_mean_norm',
+            #         tf.linalg.norm(self._running_mean_obs.mean),
+            #         step=self._tf_time_step
+            #     )
+            #     tf.summary.scalar(
+            #         f'obs_running_std_norm',
+            #         tf.linalg.norm(tf.sqrt(self._running_mean_obs.var)),
+            #         step=self._tf_time_step
+            #     )
 
     @tf.function(experimental_relax_shapes=True)
     def _update_rewards_rms(self, rewards):
@@ -555,6 +558,7 @@ class BaseACERAgent(ABC):
                 tf.summary.scalar(
                     f'rewards_running_std', tf.sqrt(self._running_mean_rewards.var[0]), step=self._tf_time_step
                 )
+
 
     def predict_action(self, observations: np.array, is_deterministic: bool = False) \
             -> Tuple[np.array, Optional[np.array]]:

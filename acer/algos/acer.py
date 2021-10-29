@@ -20,31 +20,32 @@ from algos.base import BaseACERAgent, BaseActor, CategoricalActor, GaussianActor
 
 
 class ACER(BaseACERAgent):
-    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, actor_layers: Optional[Tuple[int]],
-                 critic_layers: Optional[Tuple[int]], lam: float = 0.1, b: float = 3, *args, **kwargs):
+    def __init__(self, observations_space: gym.Space, actions_space: gym.Space, actor_layers_mean: Optional[Tuple[int]],
+                 actor_layers_std: Optional[Tuple[int]], critic_layers: Optional[Tuple[int]], lam: float = 0.1, b: float = 3, *args, **kwargs):
         """BaseActor-Critic with Experience Replay
 
         TODO: finish docstrings
         """
 
-        super().__init__(observations_space, actions_space, actor_layers, critic_layers, *args, **kwargs)
+        super().__init__(observations_space, actions_space, actor_layers_mean, actor_layers_std, critic_layers, *args, **kwargs)
         self._lam = lam
         self._b = b
 
     def _init_actor(self) -> BaseActor:
         if self._is_discrete:
             return CategoricalActor(
-                self._observations_space, self._actions_space, self._actor_layers,
+                self._observations_space, self._actions_space, self._actor_layers_mean, self._actor_layers_std,
                 self._actor_beta_penalty, self._tf_time_step
             )
         else:
             return GaussianActor(
-                self._observations_space, self._actions_space, self._actor_layers,
-                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step
+                self._observations_space, self._actions_space, self._actor_layers_mean, self._actor_layers_std,
+                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step,
             )
 
     def _init_critic(self) -> Critic:
-        return Critic(self._observations_space, self._critic_layers, self._tf_time_step)
+        return Critic(self._observations_space, self._critic_layers, self._tf_time_step,
+                      )
 
     def learn(self):
         """
@@ -136,7 +137,6 @@ class ACER(BaseACERAgent):
         gradients = zip(grads, self._actor.trainable_variables)
 
         self._actor_optimizer.apply_gradients(gradients)
-
         with tf.GradientTape() as tape:
             loss = self._critic.loss(observations, d)
         grads = tape.gradient(loss, self._critic.trainable_variables)
