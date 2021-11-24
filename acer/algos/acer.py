@@ -27,6 +27,7 @@ class ACER(BaseACERAgent):
         TODO: finish docstrings
         """
         self.alpha_loss = kwargs.get('alpha_loss')
+        self.std_net_bias = kwargs.get('std_net_bias')
         super().__init__(observations_space, actions_space, actor_layers_mean, actor_layers_std, critic_layers, *args, **kwargs)
         self._lam = lam
         self._b = b
@@ -41,7 +42,8 @@ class ACER(BaseACERAgent):
         else:
             return GaussianActor(
                 self._observations_space, self._actions_space, self._actor_layers_mean, self._actor_layers_std,
-                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step, alpha_loss=self.alpha_loss
+                self._actor_beta_penalty, self._actions_bound, self._std, self._tf_time_step, alpha_loss=self.alpha_loss,
+                std_net_bias=self.std_net_bias
             )
 
     def _init_critic(self) -> Critic:
