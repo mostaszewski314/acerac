@@ -160,7 +160,8 @@ class ACER(BaseACERAgent):
         self._critic_optimizer.apply_gradients(gradients)
 
     def _fetch_offline_batch(self) -> List[Dict[str, Union[np.array, list]]]:
-        trajectory_lens = [np.random.geometric(1 - self._lam) + 1 for _ in range(self._num_parallel_envs)]
+        # trajectory_lens = [np.random.geometric(1 - self._lam) + 1 for _ in range(self._num_parallel_envs)]
+        trajectory_lens = [10 for _ in range(self._num_parallel_envs)]
         batch = []
         [batch.extend(self._memory.get(trajectory_lens)) for _ in range(self._batches_per_env)]
         return batch

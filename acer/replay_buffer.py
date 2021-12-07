@@ -1,4 +1,4 @@
-from __future__ import annotations
+# from __future__ import annotations
 import pickle
 from dataclasses import dataclass
 import functools
@@ -411,7 +411,7 @@ class MultiReplayBuffer:
             pickle.dump(self, f)
 
     @staticmethod
-    def load(path: str) -> MultiReplayBuffer:
+    def load(path: str): # -> MultiReplayBuffer:
         """Loads the buffer from the disk
 
         Args:
