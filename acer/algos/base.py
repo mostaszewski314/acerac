@@ -54,8 +54,12 @@ class BaseActor(ABC, tf.keras.Model):
         # TODO: probably needs output layer to squash the values to given interval
         self._hidden_layers_std = []
         self._hidden_layers_std.extend(build_mlp_network(layers_sizes=layers_std))
-        self._hidden_layers_std.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer(),
-         bias_initializer=tf.keras.initializers.Constant(value=self.std_net_bias)))
+        if self.std_net_bias is not None:
+            self._hidden_layers_std.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer(),
+            bias_initializer=tf.keras.initializers.Constant(value=self.std_net_bias)))
+        else:
+            self._hidden_layers_std.append(tf.keras.layers.Dense(actions_dim, kernel_initializer=utils.normc_initializer()))
+
 
 
 

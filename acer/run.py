@@ -17,7 +17,7 @@ parser.add_argument('--env_name', type=str, help='OpenAI Gym environment name', 
 parser.add_argument('--gamma', type=float, help='discount factor', required=False, default=0.99)
 parser.add_argument('--lam', type=float, help='lambda parameter', required=False, default=0.9)
 parser.add_argument('--alpha_loss', type=float, help='alpha parameter', required=False, default=0.1)
-parser.add_argument('--std_net_bias', type=float, help='std_net_bias parameter', required=False, default=-0.9)
+parser.add_argument('--std_net_bias', type=float, help='std_net_bias parameter', required=False, default=None)
 parser.add_argument('--b', type=float, help='probability density truncation coefficient',
                     required=False, default=3)
 parser.add_argument('--actor_adam_epsilon', type=float, help='ADAM optimizer epsilon parameter (BaseActor)',
@@ -85,7 +85,7 @@ parser.add_argument('--num_evaluation_runs', type=int, help='Number of evaluatio
 parser.add_argument('--max_time_steps', type=int, help='Maximum number of time steps of agent learning. -1 means no '
                                                        'time steps limit',
                     default=-1)
-parser.add_argument('--log_dir', type=str, help='Logging directory', default='logs/256_net_Walker_-0.9std')
+parser.add_argument('--log_dir', type=str, help='Logging directory', default='logs/256_net_Walker')
 parser.add_argument('--no_checkpoint', help='Disable checkpoint saving', action='store_true')
 parser.add_argument('--no_tensorboard', help='Disable tensorboard logs', action='store_true')
 parser.add_argument('--experiment_name', type=str, help='Name of the current experiment', default='')
